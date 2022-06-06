@@ -8,7 +8,6 @@
  * See the COPYING file in the top-level directory.
  */
 
-/*TODO*/
 #include "qemu/osdep.h"
 #include "libqtest-single.h"
 #include "qemu/bswap.h"
