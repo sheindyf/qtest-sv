@@ -60,8 +60,8 @@ libqos_srcs = files(
         'x86_64_pc-machine.c',
 )
 
-libqos = static_library('qos', libqos_srcs + genh,
+libqos_sv = static_library('qos_sv', libqos_srcs + genh,
                         name_suffix: 'fa',
                         build_by_default: false)
 
-qos = declare_dependency(link_whole: libqos)
+qos_sv = declare_dependency(link_whole: libqos_sv)
