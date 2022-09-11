@@ -6,6 +6,10 @@
 #include "pci.h"
 #include "qapi/qmp/qdict.h"
 
+// global object, derived by all tests
+QOSState *global_qs;
+
+
 /*** Test Setup & Teardown ***/
 
 /**

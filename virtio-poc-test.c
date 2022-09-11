@@ -20,8 +20,6 @@
 #include "libqos-sv/virtio-pci.h"
 #include "hw/pci/pci.h"
 
-#include "qemu/osdep.h"
-#include "libqtest.h"
 #include "libqos-sv/libqos-pc.h"
 #include "libqos-sv/libqos-spapr.h"
 #include "libqos-sv/virtio.h"
@@ -34,6 +32,96 @@
 #include "standard-headers/linux/virtio_ring.h"
 #include "standard-headers/linux/virtio_blk.h"
 #include "standard-headers/linux/virtio_pci.h"
+
+
+
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
+/*
+#define VIRTIO_VENDOR_ID 0x1AF4
+#define VIRTIO_BLK_DEVID 0x1042
+#define VIRTIO_NET_DEVID 0x1041
+
+QVirtioPCIDevice *Xvirtio_blk_pci_init(QOSState *qs, uint32_t devfn);
+QVirtioPCIDevice *Xvirtio_blk_device_init(uint32_t devfn, QVirtQueue** virt_queues, uint16_t num_queues);
+QVirtioPCIDevice *Xvirtio_blk_device_init_g(QOSState *qs, uint32_t devfn, QVirtQueue** virt_queues, uint16_t num_queues);
+
+
+QVirtioPCIDevice *Xvirtio_blk_pci_init(QOSState *qs, uint32_t devfn)
+{
+    QVirtioPCIDevice *dev;
+    QPCIAddress pci_addr;
+
+    pci_addr.devfn = devfn;
+    pci_addr.vendor_id = VIRTIO_VENDOR_ID;
+    pci_addr.device_id = VIRTIO_BLK_DEVID;
+
+    uint64_t features;
+
+
+    dev = virtio_pci_new(qs->pcibus, &pci_addr);
+    if (!dev) {
+        printf("virtio PCI device is NULL\n");
+        return NULL;
+    }
+
+    g_assert_cmphex(dev->vdev.device_type, ==, VIRTIO_ID_BLOCK);
+
+    qvirtio_pci_device_enable(dev);
+    qvirtio_reset(&dev->vdev);
+    qvirtio_set_acknowledge(&dev->vdev);
+    qvirtio_set_driver(&dev->vdev);
+    qpci_msix_enable(dev->pdev);
+    qvirtio_pci_set_msix_configuration_vector(dev, &qs->alloc, 0); //TODO: dynamic entry
+
+    features = qvirtio_get_features(&dev->vdev);
+    qvirtio_set_features(&dev->vdev, features);
+
+    return dev;
+}
+
+QVirtioPCIDevice *Xvirtio_blk_device_init_g(QOSState *qs, uint32_t devfn, QVirtQueue** virt_queues, uint16_t num_queues)
+{
+    QVirtioPCIDevice *dev = Xvirtio_blk_pci_init(qs, devfn);
+
+    for(int q = 0; q < num_queues; q++)
+    {
+        virt_queues[q] = qvirtqueue_setup(&dev->vdev, &(qs->alloc), q);
+        qvirtqueue_pci_msix_setup(dev, (QVirtQueuePCI *)virt_queues[q], &qs->alloc, 1);
+    }
+    
+    // finalize virtio device initialization
+    qvirtio_driver_ok(dev);
+    return dev;
+}
+
+QVirtioPCIDevice *Xvirtio_blk_device_init(uint32_t devfn, QVirtQueue** virt_queues, uint16_t num_queues)
+{
+    return Xvirtio_blk_device_init_g(global_qs, devfn, virt_queues);
+}
+
+//------------------------------------------------------------------------
+
+#define ERROR -1
+
+void qpci_host_get_bdfs(QPCIHostFunction **funcs, uint32_t devid)
+{
+    char cmd[25];
+    sprintf(cmd, "sudo lspci | grep %x", devid);
+    int status = system(cmd);
+    if(status == ERROR)
+    {
+        //TBD
+    }
+
+    int x = lspci();
+}
+*/
+
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
+
 
 #define TEST_IMAGE_SIZE (64 * 1024 * 1024)
 #define QVIRTIO_BLK_TIMEOUT_US (30 * 1000 * 1000)
@@ -55,7 +143,7 @@ static uint64_t virtio_blk_request(QGuestAllocator *alloc, QVirtioDevice *d,
 {
     uint64_t addr;
     uint8_t status = 0xFF;
-    g_assert_cmpuint(data_size % 512, ==, 0);
+    g_assert_cmpuint(data_size % 4096, ==, 0);
     addr = guest_alloc(alloc, sizeof(*req) + data_size);
     if (!addr)
     {
@@ -108,10 +196,10 @@ static void virtio_blk_send_command(QGuestAllocator *alloc, QTestState *qts, QVi
     qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
 
-    uint8_t status = 0;
-    qtest_memwrite(qts, req_addr + size + 16, &status, 1);
-    qtest_memread(qts, req_addr + size + 16, &status, 1);
-    g_assert_cmpint(status, ==, 0);
+    // uint8_t status = 0;
+    // qtest_memwrite(qts, req_addr + size + 16, &status, 1);
+    // qtest_memread(qts, req_addr + size + 16, &status, 1);
+    // g_assert_cmpint(status, ==, 0);
 
     guest_free(alloc, req_addr);
 
@@ -126,6 +214,7 @@ static void virtio_blk_send_command(QGuestAllocator *alloc, QTestState *qts, QVi
     req_addr = virtio_blk_request(alloc, dev, &req, size, qts);
     printf("\tRequest address = 0x%lx\n", req_addr);
 
+    g_free(req.data);
 
     free_head = qvirtqueue_add(qts, vq, req_addr, 16, false, true);
     qvirtqueue_add(qts, vq, req_addr + 16, size, true, true);
@@ -136,6 +225,11 @@ static void virtio_blk_send_command(QGuestAllocator *alloc, QTestState *qts, QVi
     qvirtio_wait_used_elem(qts, dev, vq, free_head, NULL,
                            QVIRTIO_BLK_TIMEOUT_US);
 
+
+    // qtest_memwrite(qts, req_addr + size + 16, &status, 1);
+    // qtest_memread(qts, req_addr + size + 16, &status, 1);
+    // g_assert_cmpint(status, ==, 0);
+
     data = g_malloc0(size);
     printf("\tReading data...\n");
     qtest_memread(qts, req_addr + 16, data, size);
@@ -143,7 +237,6 @@ static void virtio_blk_send_command(QGuestAllocator *alloc, QTestState *qts, QVi
     g_assert_cmpstr(data, ==, "TEST");
 
     guest_free(alloc, req_addr);
-    g_free(req.data);
     g_free(data);
 }
 
@@ -210,20 +303,104 @@ static void virtio_blk_test(void)
 {
     printf("\n---------------- [virtio_poc_test] ----------------\n");
 
+
+
+
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+/*
+    typedef struct QPCIHostFunction {
+        char host_bdf[100];
+        int guest_devfn;
+    } QPCIHostFunction;
+
+    // configurable params: devid, num pfs, num queues
+
+    //----------------pre requirements--------------------
+    // get requested bdfs by device id
+    int devid = 0x145a;
+    QPCIHostFunction* funcs[8];
+    qpci_host_get_bdfs(funcs, devid);
+    
+
+    // create qtest instance with requested pfs
+    qtest_guest_boot(funcs, k);
+    {
+        // look for free pci slots - TBD
+        int addr = 0x4;
+
+        // create command line
+        const char cmd[500];
+        for(int i = 0; i < k; i++) {
+            cmd = g_strdup_printf("%s
+                                -device vfio-pci,"
+                                "host=%s,"
+                                "addr=0x%d.0x0 ",
+                                cmd, funcs[i]->host_bdf, addr);
+            // assign devfn per function
+            funcs[i]->guest_devfn = PCI_DEVFN(addr, 0);
+        }
+
+
+        // initialise global qs
+        global_qs = qtest_pc_boot(cmd);
+    }
+
+    //---------------virtio configuration------------------
+    QVirtQueue** virtqs;
+    int virtdev_slot = funcs[x]->guest_devfn;
+    dev = virtio_blk_device_init(virtdev_slot, virtqs, num_queues);
+    {
+        
+        // init virtio pci device
+        dev = virtio_blk_pci_init(virtdev_slot);
+
+        // setup virtqueues
+        // alloc virtqs - TBD
+        for(int i = 0; i < num_queues; i++)
+            virtqs[i] = qvirtq_setup(dev, i, msix, num_vectors)
+
+        
+        // finalize virtio initialization
+        qvirtio_driver_ok(dev)
+    }
+
+*/
+
+//@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+
     QOSState *qs;
     QVirtioPCIDevice *dev;
     QVirtQueue *vq;
 
+
     const char *cmd = "-device vfio-pci,"
                         "host=86:01.0,"
-                        // "host=86:01.1,"
-                        "addr=0x4.0x0 ";
+                        "addr=0x4.0x0 "
+                        "-device vfio-pci,"
+                        "host=86:01.1,"
+                        "addr=0x5.0x0 ";
 
     qs = qtest_pc_boot(cmd);
 
-    sleep(2);
+    // sleep(2);
+    // getchar();
 
-    dev = virtio_blk_pci_init(qs->pcibus, 0x20, qs);
+    // QPCIDevice *pdev;
+    // for(int i = 0; i < 0xff; i++){
+    //     pdev = qpci_device_find(qs->pcibus, i);
+    //     if(pdev != NULL)
+    //     {
+    //         printf("dev 0x%x is not NULL\n", i);
+    //         printf("cfg ofst 0: 0x%x\n", qpci_config_readl(pdev, 0x0));
+    //         getchar();
+    //     }
+    //     else 
+    //     {
+    //         printf("dev 0x%x is NULL\n", i);
+    //     }
+    // }
+   // goto end;
+    dev = virtio_blk_pci_init(qs->pcibus, PCI_DEVFN(4, 0), qs);
     if (!dev)
     {
         printf("DEV is null (in virtio_blk_test)\n");
@@ -259,7 +436,8 @@ static void virtio_blk_test(void)
     virtio_blk_pci_destroy(dev);
 
 end:
-    qtest_pc_shutdown(qs);
+    printf("end\n");
+  //  qtest_pc_shutdown(qs);
 }
 
 int main(int argc, char **argv)
