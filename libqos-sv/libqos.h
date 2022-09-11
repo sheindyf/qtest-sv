@@ -21,6 +21,8 @@ struct QOSState {
     QOSOps *ops;
 };
 
+extern QOSState *global_qs;
+
 QOSState *qtest_vboot(QOSOps *ops, const char *cmdline_fmt, va_list ap);
 QOSState *qtest_boot(QOSOps *ops, const char *cmdline_fmt, ...);
 void qtest_common_shutdown(QOSState *qs);
