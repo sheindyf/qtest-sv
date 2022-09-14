@@ -36,9 +36,9 @@
 
 
 //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
-
 /*
+
+
 #define VIRTIO_VENDOR_ID 0x1AF4
 #define VIRTIO_BLK_DEVID 0x1042
 #define VIRTIO_NET_DEVID 0x1041
@@ -100,24 +100,65 @@ QVirtioPCIDevice *Xvirtio_blk_device_init(uint32_t devfn, QVirtQueue** virt_queu
 {
     return Xvirtio_blk_device_init_g(global_qs, devfn, virt_queues);
 }
+*/
+
 
 //------------------------------------------------------------------------
 
+typedef struct QPCIHostFunction {
+    char host_bdf[30];
+    int guest_devfn;
+} QPCIHostFunction;
+
 #define ERROR -1
 
-void qpci_host_get_bdfs(QPCIHostFunction **funcs, uint32_t devid)
+static void qpci_host_get_bdfs(QPCIHostFunction **funcs, uint32_t devid)
 {
-    char cmd[25];
-    sprintf(cmd, "sudo lspci | grep %x", devid);
-    int status = system(cmd);
-    if(status == ERROR)
-    {
-        //TBD
+    FILE *fp;
+    char cmd[40];
+    char path[30];
+    uint16_t func = 0;
+    sprintf(cmd, "lspci | grep %x | awk \'{print $1}\'", devid);
+
+    fp = popen(cmd, "r");
+    if (fp == NULL) {
+        printf("Failed to get host functions BDF\n" );
+        exit(1);
     }
 
-    int x = lspci();
+    while (fgets(path, sizeof(path), fp) != NULL) {
+        path[strlen(path) - 1] = '\0';
+        strcpy(funcs[func]->host_bdf, path);
+        func++;
+    }
+    /* close */
+    pclose(fp);
 }
-*/
+
+// create qtest instance with requested pfs
+
+static void qtest_guest_boot(QPCIHostFunction **funcs, uint32_t k)
+{
+    // TODO: look for free pci slots - TBD
+    int addr = 0x4; //alloc_pci_slot();
+
+    char cmd[100] = "";
+    char cmdline[500] = "";
+    // char *command;
+    for(int i = 0; i < k; i++) {
+        sprintf(cmd, "-device vfio-pci,host=%s,addr=0x%d.0x0 ",
+                funcs[i]->host_bdf, addr);
+        strcat(cmdline, cmd);
+        // assign devfn per function
+        funcs[i]->guest_devfn = PCI_DEVFN(addr, 0);
+        printf("func: %d, host bdf %s, guess devfn %x\n", i, funcs[i]->host_bdf, funcs[i]->guest_devfn);
+        addr++;
+    }
+
+    printf("cmdline: %s\n", cmdline);
+    // initialise global qs
+    global_qs = qtest_pc_boot(cmd);
+}
 
 //@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
@@ -379,6 +420,18 @@ static void virtio_blk_test(void)
                         "-device vfio-pci,"
                         "host=86:01.1,"
                         "addr=0x5.0x0 ";
+
+    // char tmp[25];
+    QPCIHostFunction *funcs[8];
+    for(int i = 0; i < 8; i++){
+        funcs[i] = malloc(sizeof(QPCIHostFunction));
+        memset(funcs[i]->host_bdf, '\0', 30);
+    }
+    qpci_host_get_bdfs(funcs, 0x145a);
+    qtest_guest_boot(funcs, 8);
+    goto end;
+
+
 
     qs = qtest_pc_boot(cmd);
 
