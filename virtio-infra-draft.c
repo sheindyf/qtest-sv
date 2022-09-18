@@ -198,9 +198,9 @@ static void virtio_blk_test(void)
         funcs[i] = malloc(sizeof(QPCIHostFunction));
         memset(funcs[i]->host_bdf, '\0', 30);
     }
+    
     qpci_host_get_bdfs(funcs, 0x145a);
     qtest_guest_boot(funcs, 8);
-    goto end;
 
 
 end:
