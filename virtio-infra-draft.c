@@ -201,11 +201,11 @@ static void virtio_blk_test(void)
     
     qpci_host_get_bdfs(funcs, 0x145a);
     qtest_guest_boot(funcs, 8);
-
+    qtest_pc_shutdown(global_qs);
+    goto end;
 
 end:
     printf("end\n");
-  //  qtest_pc_shutdown(qs);
 }
 
 int main(int argc, char **argv)
