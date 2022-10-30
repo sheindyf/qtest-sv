@@ -7,6 +7,7 @@ endif
 
 qtests_generic = [
   'virtio-poc-test',
+  'virtio-infra-draft',
 ]
 if config_host.has_key('CONFIG_MODULES')
   qtests_generic += [ 'modules-test' ]
